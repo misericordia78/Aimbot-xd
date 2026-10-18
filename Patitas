@@ -1,0 +1,283 @@
+--[[
+    Menú de Disparador (Local)
+    Ubicación: StarterPlayer > StarterPlayerScripts
+--]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ==========================================
+-- VARIABLES DE CONFIGURACIÓN
+-- ==========================================
+local config = {
+    Aimbot = false,
+    ESP = false,
+    Speed = false,
+    SpeedValue = 50,
+    AimbotSmoothness = 0.2,
+    AimbotFOV = 150,
+}
+
+-- ==========================================
+-- INTERFAZ GRÁFICA (MENÚ)
+-- ==========================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "HackMenu"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Marco principal
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 220, 0, 320)
+MainFrame.Position = UDim2.new(0, 20, 0, 20)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+-- Título
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Title.Text = "⚡ DISPARADOR HUB"
+Title.TextColor3 = Color3.fromRGB(0, 255, 150)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 14
+Title.Parent = MainFrame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.Parent = Title
+
+-- Función auxiliar para crear botones
+local function createButton(text, yPos, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 180, 0, 32)
+    btn.Position = UDim2.new(0.5, 0, 0, yPos)
+    btn.AnchorPoint = Vector2.new(0.5, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 13
+    btn.Parent = MainFrame
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+    
+    btn.MouseButton1Click:Connect(function()
+        callback(btn)
+    end)
+    return btn
+end
+
+-- Botón Aimbot
+local AimbotBtn = createButton("Aimbot: OFF", 50, function(btn)
+    config.Aimbot = not config.Aimbot
+    btn.Text = "Aimbot: " .. (config.Aimbot and "ON" or "OFF")
+    btn.BackgroundColor3 = config.Aimbot and Color3.fromRGB(0, 150, 80) or Color3.fromRGB(50, 50, 50)
+end)
+
+-- Botón ESP
+local ESPBtn = createButton("ESP: OFF", 90, function(btn)
+    config.ESP = not config.ESP
+    btn.Text = "ESP: " .. (config.ESP and "ON" or "OFF")
+    btn.BackgroundColor3 = config.ESP and Color3.fromRGB(0, 150, 80) or Color3.fromRGB(50, 50, 50)
+    -- La lógica del ESP se maneja en el bucle de abajo
+end)
+
+-- Botón Velocidad
+local SpeedBtn = createButton("Velocidad: OFF", 130, function(btn)
+    config.Speed = not config.Speed
+    btn.Text = "Velocidad: " .. (config.Speed and "ON" or "OFF")
+    btn.BackgroundColor3 = config.Speed and Color3.fromRGB(0, 150, 80) or Color3.fromRGB(50, 50, 50)
+end)
+
+-- Control de Velocidad (Input)
+local SpeedInput = Instance.new("TextBox")
+SpeedInput.Size = UDim2.new(0, 180, 0, 30)
+SpeedInput.Position = UDim2.new(0.5, 0, 0, 170)
+SpeedInput.AnchorPoint = Vector2.new(0.5, 0)
+SpeedInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+SpeedInput.Text = "50"
+SpeedInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedInput.PlaceholderText = "Velocidad (16-250)"
+SpeedInput.Font = Enum.Font.Gotham
+SpeedInput.TextSize = 12
+SpeedInput.Parent = MainFrame
+
+SpeedInput.FocusLost:Connect(function()
+    local num = tonumber(SpeedInput.Text)
+    if num then
+        config.SpeedValue = math.clamp(num, 16, 250)
+        SpeedInput.Text = tostring(config.SpeedValue)
+    end
+end)
+
+-- Texto de estado
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, 0, 0, 40)
+StatusLabel.Position = UDim2.new(0, 0, 1, -45)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Presiona [K] para Aim Key"
+StatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 11
+StatusLabel.Parent = MainFrame
+
+-- ==========================================
+-- LÓGICA DEL AIMBOT
+-- ==========================================
+local aimKey = Enum.KeyCode.K
+local isAiming = false
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == aimKey then
+        isAiming = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == aimKey then
+        isAiming = false
+    end
+end)
+
+-- Función para obtener el enemigo más cercano al centro de la pantalla
+local function getClosestTarget()
+    local closest = nil
+    local shortestDist = config.AimbotFOV
+    local center = Camera.ViewportSize / 2
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local head = player.Character:FindFirstChild("Head")
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            
+            if head and humanoid and humanoid.Health > 0 then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        closest = head
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- Bucle del Aimbot
+RunService.RenderStepped:Connect(function()
+    if config.Aimbot and isAiming then
+        local target = getClosestTarget()
+        if target then
+            local targetPos = target.Position
+            local currentCFrame = Camera.CFrame
+            local goalCFrame = CFrame.new(currentCFrame.Position, targetPos)
+            
+            -- Suavizado
+            Camera.CFrame = currentCFrame:Lerp(goalCFrame, config.AimbotSmoothness)
+        end
+    end
+end)
+
+-- ==========================================
+-- LÓGICA DEL ESP (Resaltado)
+-- ==========================================
+local espHighlights = {}
+
+local function updateESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local character = player.Character
+            local humanoid = character:FindFirstChild("Humanoid")
+            
+            if humanoid and humanoid.Health > 0 then
+                if config.ESP then
+                    if not espHighlights[player] then
+                        local highlight = Instance.new("Highlight")
+                        highlight.Name = "HackESP"
+                        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        highlight.FillTransparency = 0.5
+                        highlight.OutlineTransparency = 0
+                        highlight.Adornee = character
+                        highlight.Parent = character
+                        espHighlights[player] = highlight
+                    end
+                else
+                    if espHighlights[player] then
+                        espHighlights[player]:Destroy()
+                        espHighlights[player] = nil
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Limpiar ESP al salir jugadores
+Players.PlayerRemoving:Connect(function(player)
+    if espHighlights[player] then
+        espHighlights[player]:Destroy()
+        espHighlights[player] = nil
+    end
+end)
+
+-- ==========================================
+-- LÓGICA DE VELOCIDAD
+-- ==========================================
+RunService.Heartbeat:Connect(function()
+    if config.Speed and LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = config.SpeedValue
+        end
+    end
+end)
+
+-- ==========================================
+-- CROSSHAIR PERSONALIZADA
+-- ==========================================
+local CrosshairGui = Instance.new("ScreenGui")
+CrosshairGui.Name = "CustomCrosshair"
+CrosshairGui.ResetOnSpawn = false
+CrosshairGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local Crosshair = Instance.new("Frame")
+Crosshair.Size = UDim2.new(0, 4, 0, 4)
+Crosshair.Position = UDim2.new(0.5, 0, 0.5, 0)
+Crosshair.AnchorPoint = Vector2.new(0.5, 0.5)
+Crosshair.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+Crosshair.BorderSizePixel = 0
+Crosshair.Parent = CrosshairGui
+
+local CrosshairCorner = Instance.new("UICorner")
+CrosshairCorner.CornerRadius = UDim.new(1, 0)
+CrosshairCorner.Parent = Crosshair
+
+-- Ocultar el cursor por defecto (opcional)
+UserInputService.MouseIconEnabled = false
+
+-- ==========================================
+-- BUCLE DE ACTUALIZACIÓN GENERAL
+-- ==========================================
+RunService.RenderStepped:Connect(function()
+    updateESP()
+end)
+
+print("✅ Menú de Disparador cargado. [K] para Aim, menú arrastrable.")
